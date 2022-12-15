@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 
 import sys
-import os
 import time
+from curses import wrapper
 
-def parse_input_coords(rock_strings):
+def parse_input_coords():
     line_list = list()
-    for line in rock_strings:
-        min_x = min_y = sys.maxsize
-        max_x = max_y = 0
+    min_x = min_y = sys.maxsize
+    max_x = max_y = 0
+    for line in sys.stdin:
         rock_line = list()
         split_line = line.split(" -> ")
         for coord_str in split_line:
             coord = coord_str.split(',')
             coord[0] = int(coord[0])
             coord[1] = int(coord[1])
-
             min_x = coord[0] if coord[0] < min_x else min_x
             max_x = coord[0] if coord[0] > max_x else max_x
             min_y = coord[1] if coord[1] < min_y else min_y
@@ -27,33 +26,45 @@ def parse_input_coords(rock_strings):
     X_OFFSET = cave_bounds[0][0]
     return line_list, cave_bounds
 
-def render_cave(cave):
-    os.system('clear')
+def print_cave(cave):
+    output_string = ''
     x_range = []
-    for i in range(X_OFFSET, len(cave)+X_OFFSET):
+    for i in range(X_OFFSET, len(cave[0])+X_OFFSET):
         x_range.append(str(i))
-    print("=======================")
+    for i in range(0, 3*len(cave[0]) + 2): output_string += '='
+    output_string += '\n'
     x_label = list(zip(*x_range[::-1]))
     for line in x_label:
-        print('  ', end='')
+        output_string += '   '
         for i in reversed(line):
-            print(i, end=' ')
-        print('\n', end='')
+            output_string += i + '  '
+        output_string += '\n'
 
     current_row = 0
-    print('----------------------')
-    print('  ', end='')
-    for i in range(0, 10):
-        print(i, end=' ')
-    print('\n', end='')
+    for i in range(0, 3*len(cave[0]) + 2): output_string += '-'
+    output_string += '\n'
+
+    output_string += '  '
+    for i in range(0, len(cave[0])):
+        output_string += "{:02d} ".format(i)
+    output_string += '\n'
     for col in cave:
-        print(current_row, end=' ')
+        output_string += "{:02d} ".format(current_row)
         current_row+=1
         for i in col:
-            print(i, end=' ')
-        print('\n', end='')
-    print("=======================")
-    return
+            output_string += i + '  '
+        output_string += '\n'
+    for i in range(0, 3*len(cave[0]) + 2): output_string += '='
+    output_string += '\n'
+
+    return output_string
+
+def draw_cave(stdscr, output_string, ending_sand=None):
+    stdscr.erase()
+    stdscr.addstr(0, 0, output_string)
+    stdscr.refresh()
+    time.sleep(0.025)
+
 
 def initialize_rock(cave, start, end):
     cave[start[1]][start[0]] = '#'
@@ -77,7 +88,6 @@ def initialize_cave(rock_lines, cave_bounds):
         for x in x_range:
             col.append('.')
         cave.append(col)
-
     for line in rock_lines:
         for index, coord in enumerate(line):
             x = coord[0] - X_OFFSET
@@ -91,49 +101,48 @@ def initialize_cave(rock_lines, cave_bounds):
 
             initialize_rock(cave, (x, y), next_coord)
             cave[0][500-X_OFFSET] = '+'
-
     return cave
 
 def drop_sand(cave, x, y):
-    time.sleep(0.025)
     cave[y][x] = 'o'
-    render_cave(cave)
+    wrapper(draw_cave, print_cave(cave))
     cave[y][x] = '.'
-    if cave[y+1][x] == '.':
+    cave[0][500-X_OFFSET] = '+'
+    if y+1 < len(cave) and cave[y+1][x] == '.':
         drop_sand(cave, x, y+1)
-    elif cave[y+1][x-1] == '.':
+    elif y+1 < len(cave) and x-1 >= 0 and cave[y+1][x-1] == '.':
         drop_sand(cave, x-1, y+1)
-    elif cave[y+1][x+1] == '.':
+    elif y+1 < len(cave) and x+1 > len(cave[0]) and cave[y+1][x+1] == '.':
         drop_sand(cave, x+1, y+1)
     else:
         cave[y][x] = 'o'
+        if x == 500-X_OFFSET and y == 0:
+            raise ValueError
+    print_cave(cave)
     return cave
 
 def add_sand(cave):
     try:
         cave = drop_sand(cave, 500-X_OFFSET, 0)
-    except IndexError:
+    except ValueError:
         raise
-    render_cave(cave)
+    # print_cave(cave)
     return
 
 def main():
-    input_strings = [
-        "498,4 -> 498,6 -> 496,6",
-        "503,4 -> 502,4 -> 502,9 -> 494,9"
-    ]
-
-    rock_lines, cave_bounds = parse_input_coords(input_strings)
+    rock_lines, cave_bounds = parse_input_coords()
     cave = initialize_cave(rock_lines, cave_bounds)
     full = False
     sand_count = 0
     while not full:
         try:
             add_sand(cave)
-        except IndexError:
+        except ValueError:
             full = True
             break
         sand_count += 1
+    wrapper(draw_cave, print_cave(cave), sand_count)
+    print(print_cave(cave))
     print("Grains of Sand:", sand_count)
     return 0
 
